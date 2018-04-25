@@ -15,6 +15,7 @@ cat > $payload <&0
 
 repository=$(jq -r '.source.repository // ""' < $payload)
 current_version=$(jq -r '.version.version // ""' < $payload)
+version_regex=$(jq -r '.source.version_regex // ""' < $payload)
 
 if [ -z "$repository" ]; then
   echo "must specify source repository"
@@ -24,6 +25,13 @@ fi
 releases=$(mktemp $TMPDIR/bosh-io-release-versions.XXXXXX)
 
 curl --retry 5 -L -s -f https://bosh.io/api/v1/releases/github.com/$repository -o $releases
+
+if [ ! -z "${version_regex}" ]; then
+  filtered_releases="$(jq '[.[] | select(.version | test($v))]' --arg v "${version_regex}" < $releases)"
+  latest_regex_match_version="$(echo $filtered_releases | jq -r .[0].version)"
+  latest_regex_match_index="$(jq 'map(.version) | index($v)' --arg v $latest_regex_match_version < $releases)"
+  echo "$(jq ".[$latest_regex_match_index:-1]" < $releases)"  > $releases
+fi
 
 last_idx=0
 if [ -z "$current_version" ]; then
